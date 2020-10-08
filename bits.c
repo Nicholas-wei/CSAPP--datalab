@@ -287,7 +287,25 @@ int howManyBits(int x) {
  *   Rating: 4
  */
 unsigned floatScale2(unsigned uf) {
-  return 2;
+    int test = 1 << 31;//1,0,0,....
+    int neg = 0;
+    if ((test & uf )!= 0)neg = 1;//说明此时是负数
+    int mask = (test >> 8)^test;
+    int exp = mask & uf;
+    if (exp == 0)
+    {
+        if (neg)return (uf<<1)+test;
+        else return uf << 1;
+    }
+    if (exp == mask)
+    {
+        return uf;
+    }
+    else
+    {
+        int add = 1;
+        return uf + (add << 23);
+    }
 }
 /* 
  * floatFloat2Int - Return bit-level equivalent of expression (int) f
@@ -302,7 +320,50 @@ unsigned floatScale2(unsigned uf) {
  *   Rating: 4
  */
 int floatFloat2Int(unsigned uf) {
-  return 2;
+    int test = 1 << 31;//1,0,0,....
+    int neg = 0;
+    if ((test & uf )!= 0)neg = 1;//说明此时是负数
+    unsigned uf_c = uf;//获取副本
+    uf_c = uf&(test >> 8);//去除小数部分
+    int mask = (test >> 8)^test;
+    int exp = mask & uf_c;
+    int bias = (1 << 7) - 1;
+    int sign = (exp >> 23) - bias;
+    if (sign < 0)
+    {
+        //printf("in1\n");
+        return 0;
+    }
+    if (exp == mask)//符号位全为1，特殊值
+    {
+        //printf("in2\n");
+        return 0x80000000;
+    }
+    if (sign == 0)//阶码为0，看正负
+    {
+        if (neg)return 0xffffffff;
+        else return 1;
+    }
+    else//阶码大于等于0，此时要计算frac部分，直接采用截尾法
+    {
+        //printf("in3\n");
+        int t_mask = ~(test>>8);
+        int frac = t_mask & uf;
+        if(sign<=23)
+        {
+            frac = frac >> (23 - sign);
+            frac = frac + (1 << sign);
+        }
+        if (sign > 23 && sign < 31)
+        {
+            frac = frac + (1 << sign);
+        }
+        else
+            return 0x80000000;
+        
+        if (neg)return(~frac)+1;
+        else return frac;
+    }
 }
 /* 
  * floatPower2 - Return bit-level equivalent of the expression 2.0^x
@@ -318,5 +379,36 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
-    return 2;
+    if(x>0&&x<=127)//in this case , it's standarized
+    {
+      int exp=x+127;//set exp (x+1),frac all zero
+      return (exp<<23);
+    }
+    if(x==0)
+    {
+      int exp=127;
+      return (exp<<23);
+    }
+    if(x<0&&x>=-126)//still standrized
+    {
+      int exp=x+127;
+      return exp<<23;
+    }
+    if(x<-126&&x>=-149)
+    {
+      int temp = 126 + x;
+      temp = - temp;
+      int i=1;
+      i<<(24-temp);
+      return i;
+    }
+    if(x<-149)return 0;
+    if(x>127)
+    {
+      int i=(1<<31);
+      i=i>>8;
+      int j=1<<31;
+      i=i^j;//get rid of the first place
+      return i;
+    }
 }
