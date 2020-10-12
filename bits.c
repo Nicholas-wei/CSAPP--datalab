@@ -166,10 +166,12 @@ int tmin(void) {
  *   Rating: 1
  */
 int isTmax(int x) {
-  int test= ~(1<<31);
-  int flag=x^test;
-  return !flag;
-
+  int i = x+1;
+  x=x+(x+1);
+  x=~x;
+  i=!i;
+  x=x+i;
+  return !x;
 }
 /* 
  * allOddBits - return 1 if all odd-numbered bits in word set to 1
@@ -211,9 +213,8 @@ int negate(int x) {
  *   Rating: 3
  */
 int isAsciiDigit(int x) {
-   return (((x - 0x30) >> 63) ^ ((x - 0x3a) >> 63))&(!(x>>63));
+   return (((x + (~0x30+1)) >> 63) ^ ((x + (~0x3a+1) ) >> 63))&(!(x>>63));
    //理解为：先取符号位，必须是一个符号是0(大于等于），一个符号是1(小于）),通过异或来判断符号不相同
-
 }
 /* 
  * conditional - same as x ? y : z 
@@ -224,8 +225,10 @@ int isAsciiDigit(int x) {
  */
 int conditional(int x, int y, int z) {
 
-  /*思路：思考X和0的关系*/
-  return (!(!(x|0)))*y+(!(x|0))*z;
+    /*思路：思考X和0的关系*/
+    int flag = !!x;
+    int fflag = !x;
+    return ((flag << 31) >> 31) & y | ((fflag << 31) >> 31) & z;
 }
 /* 
  * isLessOrEqual - if x <= y  then return 1, else return 0 
@@ -242,7 +245,7 @@ int isLessOrEqual(int x, int y) {
     int overflow_1 = (o_x) & (!o_y);//1则x<0并且y>=0,可以直接返回1
     int overflow_2 = !((!o_x) & (o_y));//前正后负，直接为0
     //2.接下来两个的符号都应该相等，并且相减不会溢出，因此x<=y等价于y-x>=0
-    int flag_for_same = !!((y - x) >> 63);//此时得到的如果是1，那么y-x<=0,如果是0，那么y-x>=0
+    int flag_for_same = !!((y + (~x+1)) >> 63);//此时得到的如果是1，那么y-x<=0,如果是0，那么y-x>=0
     return (overflow_2)&((overflow_1) | (!flag_for_same));
 }
 //4
@@ -271,8 +274,37 @@ int logicalNeg(int x) {
  *  Max ops: 90
  *  Rating: 4
  */
-int howManyBits(int x) {
-  return 0;
+int howManyBits(int x)
+{
+	//特征数：对于正数，寻找从左向右第一个1的位置，负数找0
+	//思路：向右移动1，2，4，8，16位通过判断是否全0或者全1来判断上述特征数
+	int flag_16 = 0;
+	int flag_8 = 0;
+	int flag_4 = 0;
+	int flag_2 = 0;
+	int flag_1 = 0;
+	int i = 1;int count=0;int is_zero=0;
+  int temp=0;int minus1=((1<<31)>>31);
+	i = ((i << 31) & x)>>31;//获取符号位，负数为全1，正数为全0
+	temp = i ^ x;//这样统一正负，都去寻找从左往右的第一个1
+	flag_16 = !(!(temp >> 16));
+	temp = temp >> (flag_16 << 4);//如果右移之后不全为0，说明还可以右移，那么x 就右移，继续操作。
+	flag_8 = !(!(temp >> 8));
+	temp = temp >> (flag_8 << 3);
+	flag_4 = !(!(temp >> 4));
+	temp = temp >> (flag_4 << 2);
+	flag_2 = !(!(temp >> 2));
+	temp = temp >> (flag_2 << 1);
+	flag_1 = !(!(temp >> 1));
+	temp = temp >> (flag_1 << 0);
+	count = (flag_16 << 4) + (flag_8 << 3) + (flag_4 << 2) + (flag_2 << 1) + flag_1;
+	is_zero = !(!x+!(x+(~minus1+1)));
+	count = count + 1 + is_zero;
+	//int is_zero = ((!(x == 0))<<31)>>31;//x是0的时候，他是0，不然是1
+	//printf("%d\n", is_zero);
+	//printf("%d\n", count);
+	//printf("%d\n", result);
+	return count;
 }
 //float
 /* 
@@ -289,9 +321,13 @@ int howManyBits(int x) {
 unsigned floatScale2(unsigned uf) {
     int test = 1 << 31;//1,0,0,....
     int neg = 0;
-    if ((test & uf )!= 0)neg = 1;//说明此时是负数
-    int mask = (test >> 8)^test;
-    int exp = mask & uf;
+    int mask=0;
+    int exp=0;
+    int add=0;
+    if ((test & uf) != 0)
+    neg = 1;
+    mask= (test >> 8)^test;
+    exp = mask & uf;
     if (exp == 0)
     {
         if (neg)return (uf<<1)+test;
@@ -303,7 +339,7 @@ unsigned floatScale2(unsigned uf) {
     }
     else
     {
-        int add = 1;
+        add = 1;
         return uf + (add << 23);
     }
 }
@@ -322,13 +358,20 @@ unsigned floatScale2(unsigned uf) {
 int floatFloat2Int(unsigned uf) {
     int test = 1 << 31;//1,0,0,....
     int neg = 0;
+    unsigned uf_c=0;
+    int mask=0;
+    int exp=0;
+    int bias=0;
+    int sign=0;
+    int t_mask=0;
+    int frac=0;
     if ((test & uf )!= 0)neg = 1;//说明此时是负数
-    unsigned uf_c = uf;//获取副本
+    uf_c = uf;//获取副本
     uf_c = uf&(test >> 8);//去除小数部分
-    int mask = (test >> 8)^test;
-    int exp = mask & uf_c;
-    int bias = (1 << 7) - 1;
-    int sign = (exp >> 23) - bias;
+    mask = (test >> 8)^test;
+    exp = mask & uf_c;
+    bias = (1 << 7) - 1;
+    sign = (exp >> 23) - bias;
     if (sign < 0)
     {
         //printf("in1\n");
@@ -347,8 +390,8 @@ int floatFloat2Int(unsigned uf) {
     else//阶码大于等于0，此时要计算frac部分，直接采用截尾法
     {
         //printf("in3\n");
-        int t_mask = ~(test>>8);
-        int frac = t_mask & uf;
+        t_mask = ~(test>>8);
+        frac = t_mask & uf;
         if(sign<=23)
         {
             frac = frac >> (23 - sign);
@@ -379,35 +422,39 @@ int floatFloat2Int(unsigned uf) {
  *   Rating: 4
  */
 unsigned floatPower2(int x) {
+    int exp=0;
+    int temp=0;
+    int i=0;
+    int j=0;
     if(x>0&&x<=127)//in this case , it's standarized
     {
-      int exp=x+127;//set exp (x+1),frac all zero
+      exp=x+127;//set exp (x+1),frac all zero
       return (exp<<23);
     }
     if(x==0)
     {
-      int exp=127;
+      exp=127;
       return (exp<<23);
     }
     if(x<0&&x>=-126)//still standrized
     {
-      int exp=x+127;
+      exp=x+127;
       return exp<<23;
     }
     if(x<-126&&x>=-149)
     {
-      int temp = 126 + x;
+      temp = 126 + x;
       temp = - temp;
-      int i=1;
+      i=1;
       i<<(24-temp);
       return i;
     }
     if(x<-149)return 0;
     if(x>127)
     {
-      int i=(1<<31);
+      i=(1<<31);
       i=i>>8;
-      int j=1<<31;
+      j=1<<31;
       i=i^j;//get rid of the first place
       return i;
     }
